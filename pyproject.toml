@@ -1,0 +1,18 @@
+[tool.poetry]
+name = "deepfa"
+version = "0.1.0"
+description = ""
+authors = ["nickmanginas <nmanginas@iit.demokritos.gr>"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.11"
+nnf = "^0.4.1"
+torch = "^2.3.1"
+more-itertools = "^10.3.0"
+graphviz = "^0.20.3"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"

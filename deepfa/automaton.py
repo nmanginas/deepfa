@@ -157,9 +157,11 @@ class DeepFA:
             else (1, sample_weight.shape[0])
         )
 
+        device = sample_weight.device
+
         transition_matrices = torch.zeros(
             batch_size, sequence_length, len(self.states), len(self.states)
-        )
+        ).to(device)
 
         for source in self.transitions:
             for destination, guard in self.transitions[source].items():
@@ -185,7 +187,9 @@ class DeepFA:
                     labelling,
                 )
 
-        initial_state_distribution = torch.zeros(batch_size, len(self.states))
+        initial_state_distribution = torch.zeros(batch_size, len(self.states)).to(
+            device
+        )
         initial_state_distribution[:, 0] = 1
 
         def batch_mm(vector: torch.Tensor, matrix: torch.Tensor):

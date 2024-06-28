@@ -1,6 +1,8 @@
 import nnf
 import torch
+import deepfa
 from deepfa.automaton import DeepFA
+from deepfa.utils import generate_random_sequence
 
 a, b = nnf.Var("a"), nnf.Var("b")
 
@@ -68,3 +70,9 @@ for symbol, weight in weights.items():
     )
 
 print("most probable assignment: {}".format(most_probable_assignment))
+
+accepting_sequence = generate_random_sequence(fa, sequence_length=3)
+print("random accepting sequence: {}".format(accepting_sequence))
+
+rejecting_sequence = generate_random_sequence(fa, accepting=False, sequence_length=3)
+print("random rejecting sequence: {}".format(rejecting_sequence))

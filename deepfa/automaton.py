@@ -128,6 +128,7 @@ class DeepFA:
         self,
         labelling: Callable[[nnf.Var], torch.Tensor],
         max_propagation: bool = False,
+        return_accepting: bool = True,
     ) -> torch.Tensor:
         # Evaluate the automaton based on a labelling i.e. a weight for each symbol
         # of the automaton in each timestep of execution.
@@ -141,6 +142,8 @@ class DeepFA:
         # :param max_propagation: Whether to compute both the circuits and the propagation
         #   of the automaton using the max-product semiring. This effectively computes the
         #   most probable path which leads to the acceptance of a sequence.
+        # :param return_accepting: Whether to aggregate the final state probabilities over
+        #   accepting or rejecting states.
         # :return: The weight of all paths starting from the initial state and ending in
         #   an accepting state if not max_propagation
         #   else the maximum weight path from an initial state to an accepting state
@@ -206,8 +209,14 @@ class DeepFA:
             initial_state_distribution,
         )
 
+        states_to_aggregate = list(
+            self.accepting_states
+            if return_accepting
+            else self.states - self.accepting_states
+        )
+
         return (
-            final_state_distribution[:, list(self.accepting_states)].sum(-1)
+            final_state_distribution[:, states_to_aggregate].sum(-1)
             if not max_propagation
-            else final_state_distribution[:, list(self.accepting_states)].max(-1).values
+            else final_state_distribution[:, states_to_aggregate].max(-1).values
         )

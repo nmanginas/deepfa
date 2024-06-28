@@ -33,21 +33,35 @@ class DeepFA:
         self.initial_state = initial_state
         self.accepting_states = accepting_states
 
-        for source in transitions:
-            for destination, guard in transitions[source].items():
-                # Compile each transition guard with dsharp. This will yield
-                # deterministic and decomposable sentences which we also make
-                # smooth to be able to compute MPE.
-                self.transitions.setdefault(source, {})[destination] = (
-                    nnf.dsharp.compile(guard.to_CNF(), executable=dsharp_path)
-                    .forget_aux()
-                    .make_smooth()
-                )
-
         # Keep the originally specified transitions before compilation
         # they are much simpler than their compiled form and better
         # for visualization
         self.original_transitions = transitions
+
+        for source in transitions:
+            for destination, guard in transitions[source].items():
+                # Compile each transition guard with dsharp. This will yield
+                # deterministic and decomposable sentences which we also make
+                # smooth to be able to compute MPE. We also add a dummy conjunction
+                # in case not all transitions are defined over the same variables.
+                # This ensures we can compute posterior marginals and MPE correctly.
+                self.transitions.setdefault(source, {})[destination] = nnf.And(
+                    {
+                        nnf.dsharp.compile(guard.to_CNF(), executable=dsharp_path)
+                        .forget_aux()
+                        .make_smooth(),
+                        nnf.And(
+                            set(
+                                map(
+                                    lambda symbol: nnf.Or(
+                                        {nnf.Var(symbol), nnf.Var(symbol, False)}
+                                    ),
+                                    self.symbols - set(map(str, guard.vars())),
+                                )
+                            )
+                        ),
+                    }
+                )
 
         if not self.check_deterministic():
             raise RuntimeError("The automaton specified is not deterministic")
@@ -100,7 +114,7 @@ class DeepFA:
             set.union,
             (
                 set(guard.vars())
-                for destandguards in self.transitions.values()
+                for destandguards in self.original_transitions.values()
                 for guard in destandguards.values()
             ),
         )

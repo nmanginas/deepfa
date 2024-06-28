@@ -1,6 +1,5 @@
 import nnf
 import torch
-import deepfa
 from deepfa.automaton import DeepFA
 from deepfa.utils import generate_random_sequence
 

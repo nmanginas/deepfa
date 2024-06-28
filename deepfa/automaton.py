@@ -91,17 +91,16 @@ class DeepFA:
     def check_deterministic(self) -> bool:
         # Will check whether the automaton is deterministic. Nothing implemented
         # in this module makes much sense for non-deterministic automata. Determinism
-        # necessitates that all outgoing transitions from a state are mutually exclusive
-        # and exhaustive
+        # necessitates that all outgoing transitions from a are mutually exclusive.
+        # Usually we also check for exhaustive guards but because of assumptions
+        # regarding categorical variables this is not implemented here.
+        # BE CAREFUL!!!! Make sure the outgoing mass from a state is always one.
 
         for state in self.states:
             guards = self.transitions[state].values()
-            if not (
-                reduce(operator.or_, guards).equivalent(nnf.true)
-                and all(
-                    (g1.negate() | g2.negate()).equivalent(nnf.true)
-                    for g1, g2 in itertools.combinations(guards, r=2)
-                )
+            if not all(
+                (g1.negate() | g2.negate()).equivalent(nnf.true)
+                for g1, g2 in itertools.combinations(guards, r=2)
             ):
                 return False
 

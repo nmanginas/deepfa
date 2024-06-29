@@ -17,6 +17,7 @@ need to add it to your path.
 The package defines an easy to use low level API for performing operations
 on DeepFA
 
+
 ```python
 import nnf
 import torch
@@ -135,4 +136,17 @@ def labelling_function(var: nnf.Var) -> torch.Tensor:
 
 # Compute the actual probability
 acceptance_prob = deepfa.forward(labelling_function)
+```
+
+Specifying an automaton via (P)LTLf. This is just for 
+convenience. The integration is done with LTLf2DFA which 
+is perhaps the least scalable (P)LTLf compiler. It is based
+on MONA so you will need to install it with 
+```apt install mona``` on Debian based systems.
+
+```python
+from deepfa.utils import parse_sapienza_to_fa
+
+fa = parse_sapienza_to_fa("G((blocked | tired) -> WX(~move))")
+fa.dot().view()
 ```

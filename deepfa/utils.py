@@ -61,6 +61,12 @@ def parse_sapienza_to_fa(
 
     mona_output = to_dfa(parsed_formula, mona_dfa_out=True)
 
+    if not mona_output.startswith("DFA"):
+        raise RuntimeError(
+            """Something has gone wrong in the translation and the 
+            output of LTLf2DFA cannot be parsed"""
+        )
+
     accepting_states = set(
         map(
             lambda value: int(value) - 1,

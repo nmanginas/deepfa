@@ -182,8 +182,8 @@ class DeepFA:
                         )
                     ),
                     operator.mul,
-                    torch.zeros(batch_size, sequence_length),
-                    torch.ones(batch_size, sequence_length),
+                    torch.zeros(batch_size, sequence_length).to(device),
+                    torch.ones(batch_size, sequence_length).to(device),
                     labelling,
                 )
 

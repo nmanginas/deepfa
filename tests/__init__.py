@@ -22,6 +22,9 @@ def labelling_function(var: nnf.Var) -> torch.Tensor:
 acceptance_prob = fa.forward(labelling_function)
 print("acceptance prob: {}".format(acceptance_prob))
 
+accumulated_acceptance_prob = fa.forward(labelling_function, accumulate=True)
+print("accumulated acceptance prob: {}".format(accumulated_acceptance_prob))
+
 # The weight of the most probable path that leads to an accepting state
 # with the same probs as above. This is the path q1 -> q2 -> q2. So
 # transition ~a is True in the first timestep and transition a & b is true

@@ -67,6 +67,8 @@ class DeepFA:
         if check_deterministic and not self.check_deterministic():
             raise RuntimeError("The automaton specified is not deterministic")
 
+        self.state2id = {state: i for i, state in enumerate(self.states)}
+
     def dot(self) -> graphviz.Digraph:
         automaton = graphviz.Digraph("automaton")
         for state in self.states:
@@ -129,6 +131,7 @@ class DeepFA:
         labelling: Callable[[nnf.Var], torch.Tensor],
         max_propagation: bool = False,
         return_accepting: bool = True,
+        accumulate: bool = False,
     ) -> torch.Tensor:
         # Evaluate the automaton based on a labelling i.e. a weight for each symbol
         # of the automaton in each timestep of execution.
@@ -166,7 +169,9 @@ class DeepFA:
 
         for source in self.transitions:
             for destination, guard in self.transitions[source].items():
-                transition_matrices[:, :, source, destination] = nnf.amc.eval(
+                transition_matrices[
+                    :, :, self.state2id[source], self.state2id[destination]
+                ] = nnf.amc.eval(
                     guard,
                     (
                         operator.add
@@ -191,7 +196,7 @@ class DeepFA:
         initial_state_distribution = torch.zeros(batch_size, len(self.states)).to(
             device
         )
-        initial_state_distribution[:, 0] = 1
+        initial_state_distribution[:, self.state2id[self.initial_state]] = 1
 
         def batch_mm(vector: torch.Tensor, matrix: torch.Tensor):
             assert len(vector.shape) == 2
@@ -213,11 +218,26 @@ class DeepFA:
             initial_state_distribution,
         )
 
-        states_to_aggregate = list(
-            self.accepting_states
+        states_to_aggregate = (
+            [self.state2id[state] for state in self.accepting_states]
             if return_accepting
-            else self.states - self.accepting_states
+            else [self.state2id[state] for state in self.states - self.accepting_states]
         )
+
+        if accumulate:
+            return (
+                torch.stack(
+                    list(
+                        itertools.accumulate(
+                            iterable=transition_matrices.permute(1, 0, 2, 3),
+                            func=batch_mm,
+                            initial=initial_state_distribution,
+                        )
+                    )[1:]
+                )
+                .squeeze(1)[:, states_to_aggregate]
+                .sum(-1)
+            )
 
         return (
             final_state_distribution[:, states_to_aggregate].sum(-1)

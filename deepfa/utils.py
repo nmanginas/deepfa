@@ -22,7 +22,7 @@ def generate_random_sequence(
 
     weights = {symbol: torch.rand(sequence_length) for symbol in deepfa.symbols}
     for weight in weights.values():
-        weight.requires_grad_()
+        _ = weight.requires_grad_()
 
     def labelling_function(var: nnf.Var) -> torch.Tensor:
         return (
@@ -33,7 +33,7 @@ def generate_random_sequence(
         labelling_function, max_propagation=True, return_accepting=accepting
     )
 
-    most_probable_assignment = {
+    most_probable_assignment: dict[str, list[bool]] = {
         symbol: (
             (torch.autograd.grad(mpe, weight, retain_graph=True)[0] * weight / mpe)
             > 0.5
@@ -54,6 +54,8 @@ def parse_sapienza_to_fa(
 
     from ltlf2dfa.ltlf2dfa import to_dfa
     from ltlf2dfa.parser.ltlf import LTLfParser
+    from ltlf2dfa.ltlf import LTLfFormula
+    from ltlf2dfa.pltlf import PLTLfFormula
     from ltlf2dfa.parser.pltlf import PLTLfParser
 
     parser = LTLfParser() if variant == "ltlf" else PLTLfParser()
@@ -74,7 +76,8 @@ def parse_sapienza_to_fa(
         )
     )
 
-    state_dict, transitions = {}, {}
+    state_dict: dict[int, int] = {}
+    transitions: dict[int, dict[int, list[nnf.NNF]]] = {}
 
     symbols = list(
         map(

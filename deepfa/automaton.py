@@ -22,6 +22,7 @@ class DeepFA:
         initial_state: int,
         accepting_states: set[int],
         dsharp_path: str = "dsharp",
+        check_deterministic: bool = True,
     ):
         # Initialize a DeepFA.
         # :param transitions: The entry transitions[source][destination] should
@@ -29,7 +30,7 @@ class DeepFA:
         # :param initial_state: The initial state of the automaton
         # :param accepting_states: The accepting states of the automaton
 
-        self.transitions = {}
+        self.transitions: dict[int, dict[int, nnf.NNF]] = {}
         self.initial_state = initial_state
         self.accepting_states = accepting_states
 
@@ -63,7 +64,7 @@ class DeepFA:
                     }
                 )
 
-        if not self.check_deterministic():
+        if check_deterministic and not self.check_deterministic():
             raise RuntimeError("The automaton specified is not deterministic")
 
     def dot(self) -> graphviz.Digraph:

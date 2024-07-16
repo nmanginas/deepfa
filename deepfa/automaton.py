@@ -234,9 +234,9 @@ class DeepFA:
                             initial=initial_state_distribution,
                         )
                     )[1:]
-                )
-                .squeeze(1)[:, states_to_aggregate]
+                )[:, :, states_to_aggregate]
                 .sum(-1)
+                .T
             )
 
         return (

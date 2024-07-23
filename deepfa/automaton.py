@@ -15,6 +15,22 @@ from typing import Callable
 from functools import reduce
 
 
+def nnf2str(sentence: nnf.NNF) -> str:
+    match sentence:
+        case nnf.true:
+            return "True"
+        case nnf.false:
+            return "False"
+        case nnf.Var(name=name, true=true):
+            return ("~" if not true else "") + str(name)
+        case nnf.And(children=children):
+            return "({})".format(" & ".join(map(nnf2str, children)))
+        case nnf.Or(children=children):
+            return "({})".format(" | ".join(map(nnf2str, children)))
+        case _:
+            raise RuntimeError("pattern matching failed in NNF")
+
+
 class DeepFA:
     def __init__(
         self,
@@ -69,7 +85,9 @@ class DeepFA:
 
         self.state2id = {state: i for i, state in enumerate(self.states)}
 
-    def dot(self) -> graphviz.Digraph:
+    def dot(self, simplify: bool = True) -> graphviz.Digraph:
+        import sympy
+
         automaton = graphviz.Digraph("automaton")
         for state in self.states:
             automaton.node(
@@ -83,7 +101,7 @@ class DeepFA:
                 automaton.edge(
                     str(source),
                     str(destination),
-                    str(guard),
+                    sympy.simplify(nnf2str(guard)) if simplify else nnf2str(guard),
                 )
 
         automaton.node("dummy", label="", style="invis")

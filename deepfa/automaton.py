@@ -101,7 +101,7 @@ class DeepFA:
                 automaton.edge(
                     str(source),
                     str(destination),
-                    sympy.simplify(nnf2str(guard)) if simplify else nnf2str(guard),
+                    str(sympy.simplify(nnf2str(guard))) if simplify else nnf2str(guard),
                 )
 
         automaton.node("dummy", label="", style="invis")

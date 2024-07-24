@@ -44,7 +44,9 @@ def generate_random_sequence(
 
 
 def parse_sapienza_to_fa(
-    formula: str, variant: Literal["ltlf", "pltlf"] = "ltlf"
+    formula: str,
+    variant: Literal["ltlf", "pltlf"] = "ltlf",
+    drop_rejecting: bool = True,
 ) -> DeepFA:
 
     # Parse an LTLf or PLTLf formula pass it through
@@ -54,8 +56,6 @@ def parse_sapienza_to_fa(
 
     from ltlf2dfa.ltlf2dfa import to_dfa
     from ltlf2dfa.parser.ltlf import LTLfParser
-    from ltlf2dfa.ltlf import LTLfFormula
-    from ltlf2dfa.pltlf import PLTLfFormula
     from ltlf2dfa.parser.pltlf import PLTLfParser
 
     parser = LTLfParser() if variant == "ltlf" else PLTLfParser()
@@ -123,14 +123,27 @@ def parse_sapienza_to_fa(
             symbolic_guard
         )
 
+    absorbing_rejecting_states = []
+    for state in transitions:
+        all_outgoing_pairs = list(transitions[state].items())
+        if (
+            len(all_outgoing_pairs) == 1
+            and all_outgoing_pairs[0][0] == state
+            and not all_outgoing_pairs[0][0] - 1 in accepting_states
+            and nnf.Or(all_outgoing_pairs[0][1]).equivalent(nnf.true)
+        ):
+            absorbing_rejecting_states.append(state)
+
     return DeepFA(
         {
             source
             - 1: {
                 destination - 1: nnf.Or(disjuncts).simplify()
                 for destination, disjuncts in transitions[source].items()
+                if destination not in absorbing_rejecting_states
             }
             for source in transitions
+            if source not in absorbing_rejecting_states
         },
         0,
         accepting_states,

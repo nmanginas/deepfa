@@ -85,7 +85,9 @@ class DeepFA:
 
         self.state2id = {state: i for i, state in enumerate(self.states)}
 
-    def dot(self, simplify: bool = True) -> graphviz.Digraph:
+    def dot(
+        self, simplify: bool = True, drop_formulae: bool = False
+    ) -> graphviz.Digraph:
         import sympy
 
         automaton = graphviz.Digraph("automaton")
@@ -101,7 +103,15 @@ class DeepFA:
                 automaton.edge(
                     str(source),
                     str(destination),
-                    str(sympy.simplify(nnf2str(guard))) if simplify else nnf2str(guard),
+                    (
+                        (
+                            str(sympy.simplify(nnf2str(guard)))
+                            if simplify
+                            else nnf2str(guard)
+                        )
+                        if not drop_formulae
+                        else "guard_{}_{}".format(source, destination)
+                    ),
                 )
 
         automaton.node("dummy", label="", style="invis")
@@ -118,7 +128,7 @@ class DeepFA:
         # BE CAREFUL!!!! Make sure the outgoing mass from a state is always one.
 
         for state in self.states:
-            guards = self.transitions[state].values()
+            guards = self.transitions.get(state, {}).values()
             if not all(
                 (g1.negate() | g2.negate()).equivalent(nnf.true)
                 for g1, g2 in itertools.combinations(guards, r=2)
@@ -186,7 +196,7 @@ class DeepFA:
         ).to(device)
 
         for source in self.transitions:
-            for destination, guard in self.transitions[source].items():
+            for destination, guard in self.transitions.get(source, {}).items():
                 transition_matrices[
                     :, :, self.state2id[source], self.state2id[destination]
                 ] = nnf.amc.eval(

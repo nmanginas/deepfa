@@ -46,7 +46,7 @@ def generate_random_sequence(
 def parse_sapienza_to_fa(
     formula: str,
     variant: Literal["ltlf", "pltlf"] = "ltlf",
-    drop_rejecting: bool = True,
+    drop_rejecting: bool = False,
 ) -> DeepFA:
 
     # Parse an LTLf or PLTLf formula pass it through
@@ -133,6 +133,8 @@ def parse_sapienza_to_fa(
             and nnf.Or(all_outgoing_pairs[0][1]).equivalent(nnf.true)
         ):
             absorbing_rejecting_states.append(state)
+
+    absorbing_rejecting_states = absorbing_rejecting_states if drop_rejecting else []
 
     return DeepFA(
         {

@@ -73,7 +73,7 @@ class DeepFA:
                                     lambda symbol: nnf.Or(
                                         {nnf.Var(symbol), nnf.Var(symbol, False)}
                                     ),
-                                    self.symbols - set(map(str, guard.vars())),
+                                    set(self.symbols) - set(map(str, guard.vars())),
                                 )
                             )
                         ),
@@ -138,15 +138,19 @@ class DeepFA:
         return True
 
     @property
-    def symbols(self) -> set[str]:
+    def symbols(self) -> list[str]:
         # Return all symbols in all transitions guards of the automaton
-        return reduce(
-            set.union,
-            (
-                set(guard.vars())
-                for destandguards in self.original_transitions.values()
-                for guard in destandguards.values()
-            ),
+        return list(
+            sorted(
+                reduce(
+                    set.union,
+                    (
+                        set(guard.vars())
+                        for destandguards in self.original_transitions.values()
+                        for guard in destandguards.values()
+                    ),
+                )
+            )
         )
 
     @property

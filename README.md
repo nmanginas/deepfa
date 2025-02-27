@@ -5,6 +5,7 @@ knowledge compilation techniques to allow for a clean integration
 between symbolic automata and neural networks
 
 # Installation
+
 With poetry:
 ```poetry add git+ssh://git@github.com:nmanginas/deepfa.git```
 
@@ -14,9 +15,9 @@ are options to pass the real path of dsharp in which case you will not
 need to add it to your path.
 
 # Usage
+
 The package defines an easy to use low level API for performing operations
 on DeepFA
-
 
 ```python
 import nnf
@@ -147,6 +148,126 @@ on MONA so you will need to install it with
 ```python
 from deepfa.utils import parse_sapienza_to_fa
 
-fa = parse_sapienza_to_fa("G((blocked | tired) -> WX(~move))")
+fa = parse_sapienza_to_fa("G((tired | blocked) -> WX(!fast))")
 fa.dot().view()
 ```
+
+# Neuro-symbolic interface
+
+This package also allows for easy integration of symbolic automata
+and neural networks. We showcase this on a simple example.
+
+![](assets/image_1.png) ![](assets/image_2.png) ![](assets/image_3.png)
+
+This sequence of three images needs is to be classified with a symbolic 
+automaton. For each image three symbols must be extracted. From top to 
+bottom this are whether the road is blocked, whether the car is going fast 
+and whether the driver is tired. For the middle image the correct labeling
+is {blocked: 1, fast: 0, tired: 0}
+
+A neural network is used to bridge between the complex image
+representation and the symbolic input expected by the DFA. To follow 
+this example you should install ```torchvision``` which is not in 
+the dependencies of the ```deepfa``` package.
+
+```python
+import torch
+import torchvision
+
+images = torch.stack(
+    [
+        torchvision.io.decode_image("assets/image_{}.png".format(i)).float()
+        / 255
+        for i in range(1, 4)
+    ]
+)
+
+symbol_grounder = torch.nn.Sequential(
+    torch.nn.Conv2d(3, 16, 3),
+    torch.nn.ReLU(),
+    torch.nn.MaxPool2d(2),
+    torch.nn.Conv2d(16, 32, 3),
+    torch.nn.ReLU(),
+    torch.nn.MaxPool2d(2),
+    torch.nn.Conv2d(32, 16, 3),
+    torch.nn.ReLU(),
+    torch.nn.MaxPool2d(2),
+    torch.nn.Flatten(),
+    torch.nn.Linear(144 + (240 * 2), 128),
+    torch.nn.ReLU(),
+    torch.nn.Linear(128, 3),
+    torch.nn.Sigmoid(),
+)
+
+symbol_grounder.load_state_dict(torch.load("assets/symbol_grounder_weights.pt"))
+
+image_predictions = symbol_grounder(images)
+
+print(image_predictions)
+```
+
+For the second image the predicted probabilities are: 
+{blocked: 0.93, fast: 0, tired: 0.57}. We can now use 
+these neural network predictions to compute the probability 
+that our symbolic pattern is satisfied by the image sequence. 
+
+```python
+from deepfa.utils import parse_sapienza_to_fa
+fa = parse_sapienza_to_fa("G((tired | blocked) -> WX(!fast))")
+```
+
+This will convert the temporal logic formula to the automaton:
+
+<img title="" src="assets/fa.png" alt="" width="260" data-align="center">
+
+```python
+weights = {
+    symbol: symbol_probs
+    for symbol, symbol_probs in zip(("blocked", "fast", "tired"), image_predictions.T)
+}
+
+
+def labelling_function(var: nnf.Var) -> torch.Tensor:
+    return weights[str(var.name)] if var.true else 1 - weights[str(var.name)]
+
+
+state_probabilities = fa.forward(
+    labelling_function, accumulate=True, accumulate_collapse_accepting=False
+)
+
+print(state_probabilities)
+```
+
+This will show the probability of being in each of the automaton states for the three
+timesteps in the sequence. Dropping ```accumulate``` arguments which keep the value
+of probabilities for all timesteps would result in the probability of accepting the
+sequence which is this case is: ```tensor([0.9848], grad_fn=<SumBackward1>)```. 
+Importantly this carries a gradient which can be used to train the system in end to end fashion. 
+
+# Explanation generation.
+
+Let's consider however what is the most possible world in which the sequence is
+accepted:
+
+```python
+mpe = fa.forward(labelling_function, max_propagation=True)
+
+most_probable_assignment = {}
+for symbol, weight in weights.items():
+    most_probable_assignment[symbol] = (
+        torch.autograd.grad(mpe, weight, retain_graph=True)[0] * weight / mpe
+    )
+
+print(mpe)
+print(most_probable_assignment)
+```
+
+The system finds the most probable explanation for accepting the sequence to be:
+
+| timestep | blocked | fast | tired |
+| -------- | ------- | ---- | ----- |
+| 1        | 1       | 1    | 1     |
+| 2        | 1       | 0    | 1     |
+| 3        | 0       | 0    | 0     |
+
+with a probability of 0.16. Interestingly this is also the correct labelling for the image sequence

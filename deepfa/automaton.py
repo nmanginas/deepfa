@@ -164,6 +164,7 @@ class DeepFA:
         max_propagation: bool = False,
         return_accepting: bool = True,
         accumulate: bool = False,
+        accumulate_collapse_accepting: bool = True,
     ) -> torch.Tensor:
         # Evaluate the automaton based on a labelling i.e. a weight for each symbol
         # of the automaton in each timestep of execution.
@@ -257,8 +258,22 @@ class DeepFA:
         )
 
         if accumulate:
-            return (
-                torch.stack(
+            if accumulate_collapse_accepting:
+                return (
+                    torch.stack(
+                        list(
+                            itertools.accumulate(
+                                iterable=transition_matrices.permute(1, 0, 2, 3),
+                                func=batch_mm,
+                                initial=initial_state_distribution,
+                            )
+                        )[1:]
+                    )[:, :, states_to_aggregate]
+                    .sum(-1)
+                    .T
+                )
+            else:
+                return torch.stack(
                     list(
                         itertools.accumulate(
                             iterable=transition_matrices.permute(1, 0, 2, 3),
@@ -266,10 +281,7 @@ class DeepFA:
                             initial=initial_state_distribution,
                         )
                     )[1:]
-                )[:, :, states_to_aggregate]
-                .sum(-1)
-                .T
-            )
+                ).squeeze(1)
 
         return (
             final_state_distribution[:, states_to_aggregate].sum(-1)

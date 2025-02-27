@@ -159,11 +159,12 @@ and neural networks. We showcase this on a simple example.
 
 ![](assets/image_1.png) ![](assets/image_2.png) ![](assets/image_3.png)
 
-This sequence of three images needs is to be classified with a symbolic 
+This sequence of three images needs to be classified with a symbolic 
 automaton. For each image three symbols must be extracted. From top to 
-bottom this are whether the road is blocked, whether the car is going fast 
-and whether the driver is tired. For the middle image the correct labeling
-is {blocked: 1, fast: 0, tired: 0}
+bottom, these are; whether the road is blocked, whether the car is going fast 
+and whether the driver is tired. Each is depicted by an emoji. 
+For the middle image the correct labeling is {blocked: 1, fast: 0, tired: 0} (again
+read from top to bottom)
 
 A neural network is used to bridge between the complex image
 representation and the symbolic input expected by the DFA. To follow 
@@ -270,4 +271,4 @@ The system finds the most probable explanation for accepting the sequence to be:
 | 2        | 1       | 0    | 1     |
 | 3        | 0       | 0    | 0     |
 
-with a probability of 0.16. Interestingly this is also the correct labelling for the image sequence
+with a probability of 0.16. Interestingly this is also the correct labelling for the image sequence.

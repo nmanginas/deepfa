@@ -583,7 +583,7 @@ for symbol, weight in weights.items():
     )[:16]
 ```
 
-We keep drop the final two timesteps from the predictions and try to find the 
+We drop the final two timesteps from the predictions and try to find the 
 most probable sequence that led to ```moving``` being true. The
 abduced trace is as follows:
 

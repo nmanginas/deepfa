@@ -278,7 +278,7 @@ with a probability of 0.16. Interestingly this is also the correct labelling for
 
 We now show another NeSy application in the caviar dataset. Consider the video:
 
-![](assets/caviar_video.mp4)
+![](assets/caviar_video.mov)
 
 It shows a pair of people performing certain activities. Each person is performing a high-level
 activity and the pair is performing a high level event. For each frame in this example the following

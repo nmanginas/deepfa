@@ -272,3 +272,282 @@ The system finds the most probable explanation for accepting the sequence to be:
 | 3        | 0       | 0    | 0     |
 
 with a probability of 0.16. Interestingly this is also the correct labelling for the image sequence.
+
+
+# Caviar Event Recognition
+
+We now show another NeSy application in the caviar dataset. Consider the video:
+
+![](assets/caviar_video.mp4)
+
+It shows a pair of people performing certain activities. Each person is performing a high-level
+activity and the pair is performing a high level event. For each frame in this example the following
+information is true:
+
+| Distance | Simple Event P1 | Simple Event P2 | Complex Event  |
+|----------|----------------|----------------|---------------|
+| 31.06    | inactive       | walking        | no_event     |
+| 24.19    | inactive       | walking        | no_event     |
+| 15.23    | inactive       | active         | interacting  |
+| 12.65    | inactive       | active         | interacting  |
+| 12.08    | active         | active         | interacting  |
+| 12.04    | active         | active         | interacting  |
+| 12.04    | active         | active         | interacting  |
+| 17.2     | walking        | walking        | interacting  |
+| 13.6     | walking        | walking        | interacting  |
+| 17.03    | walking        | walking        | interacting  |
+| 24.02    | walking        | walking        | interacting  |
+| 24.02    | walking        | walking        | interacting  |
+| 29.15    | walking        | walking        | no_event     |
+| 33.38    | walking        | walking        | no_event     |
+| 31.14    | walking        | walking        | no_event     |
+| 26.08    | walking        | walking        | no_event     |
+| 19.42    | walking        | walking        | moving       |
+| 16.12    | walking        | walking        | moving       |
+
+
+where distance denotes the distance between the two people, the two simple event columns the low-level
+activities each is performing and the complex event column the high-level event the pair is performing. First we load a network from 
+a checkpoint.
+
+```python
+import torch
+
+class CNN(torch.nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.encoder = torch.nn.Sequential(
+            torch.nn.Conv2d(3, 32, 5, 1),
+            torch.nn.ReLU(),
+            torch.nn.MaxPool2d(2),
+            torch.nn.Conv2d(32, 64, 5, 1),
+            torch.nn.ReLU(),
+            torch.nn.MaxPool2d(2),
+            torch.nn.Conv2d(64, 64, 5, 1),
+            torch.nn.ReLU(),
+            torch.nn.MaxPool2d(2),
+            torch.nn.Conv2d(64, 64, 5, 1),
+            torch.nn.ReLU(),
+            torch.nn.MaxPool2d(2),
+        )
+
+    def forward(self, images: torch.Tensor):
+        return self.encoder(images).reshape(images.shape[0], -1)
+
+
+class CaviarNet(torch.nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.cnn_backbone = CNN()
+        self.projection = torch.nn.Linear(64, 4)
+
+    def forward(
+        self, p1_bbs: torch.Tensor, p2_bbs: torch.Tensor, distances: torch.Tensor
+    ) -> dict[str, torch.Tensor]:
+        p1_predictions, p2_predictions = self.projection(
+            self.cnn_backbone(p1_bbs)
+        ).softmax(-1), self.projection(self.cnn_backbone(p2_bbs)).softmax(-1)
+
+        return {
+            "p1": p1_predictions,
+            "p2": p2_predictions,
+            "close(p1, p2)": (distances < 25).float().unsqueeze(-1),
+        }
+
+
+caviar_net = CaviarNet()
+caviar_net.load_state_dict(torch.load("assets/caviar_checkpoint.pt"))
+```
+
+We then load the frame information which includes the distance and
+the bounding boxes for each person from which the neural network
+should predict the low-level activities (simple events) they are 
+performing. Next we define an automaton which can compute the 
+high-level (complex) events given the low-level activities.
+
+```python
+import nnf
+import itertools
+from deepfa.automaton import DeepFA
+
+def generate_constraint(constrained_vars: list[nnf.Var]):
+    return nnf.And(
+        [
+            nnf.And(
+                [
+                    (~v1 | ~v2)
+                    for v1, v2 in itertools.combinations(constrained_vars, r=2)
+                ]
+            ),
+            nnf.Or(constrained_vars),
+        ],
+    )
+
+
+(
+    p1_walking,
+    p1_running,
+    p1_active,
+    p1_inactive,
+    p2_walking,
+    p2_running,
+    p2_active,
+    p2_inactive,
+    close_p1_p2,
+) = (
+    nnf.Var(var_name)
+    for var_name in [
+        "p1_walking",
+        "p1_running",
+        "p1_active",
+        "p1_inactive",
+        "p2_walking",
+        "p2_running",
+        "p2_active",
+        "p2_inactive",
+        "close_p1_p2",
+    ]
+)
+
+constraint_1, constraint_2 = generate_constraint(
+    [p1_walking, p1_running, p1_active, p1_inactive]
+), generate_constraint([p2_walking, p2_running, p2_active, p2_inactive])
+
+t12 = p1_walking & p2_walking & close_p1_p2
+t13 = close_p1_p2 & (p1_active | p1_inactive) & (p2_active | p2_inactive)
+
+t21 = (
+    (~close_p1_p2 & (p1_walking | p2_walking))
+    | (p1_active & (p2_active | p2_inactive))
+    | (p1_inactive & p2_active)
+    | p1_running
+    | p2_running
+)
+
+t31 = ~close_p1_p2 & (p1_walking | p2_walking) | p1_running | p2_running
+
+t11 = t12.negate() & t13.negate() & constraint_1 & constraint_2
+t22 = t21.negate() & constraint_1 & constraint_2
+t33 = t31.negate() & constraint_1 & constraint_2
+
+t12 &= constraint_1 & constraint_2
+t13 &= constraint_1 & constraint_2
+t21 &= constraint_1 & constraint_2
+t31 &= constraint_1 & constraint_2
+
+transitions = {
+    0: {
+        0: t11,
+        1: t12,
+        2: t13,
+    },
+    1: {0: t21, 1: t22},
+    2: {0: t31, 2: t33},
+}
+
+deepfa = DeepFA(transitions, 0, {1})
+```
+
+The automaton has three states with state 0 representing no_event, 
+state 1 meeting and state 2 interacting. We can then make
+predictions about the probability of the complex event at each 
+timestep, i.e. the probability of being in each state given the 
+predictions of the neural network.
+
+```python
+with open("assets/caviar_data.pkl", "rb") as input_file:
+    caviar_data = pickle.load(input_file)
+
+# Load the bounding boxes which we have already extracted
+# from the raw video frames, and along with the distance
+# in each frame pass them to the neural network.
+bb1, bb2 = (
+    torch.stack(
+        [torch.tensor(frame["objects"][0]["bounding_box"]) for frame in caviar_data]
+    ).permute(0, 3, 1, 2)
+    / 255,
+    torch.stack(
+        [torch.tensor(frame["objects"][1]["bounding_box"]) for frame in caviar_data]
+    ).permute(0, 3, 1, 2)
+    / 255,
+)
+
+simple_event_predictions = caviar_net(
+    bb1, bb2, torch.tensor([frame["distance"] for frame in caviar_data])
+)
+
+weights = (
+    {
+        var: value
+        for var, value in zip(
+            ["p1_walking", "p1_running", "p1_active", "p1_inactive"],
+            simple_event_predictions["p1"].T,
+        )
+    }
+    | {
+        var: value
+        for var, value in zip(
+            ["p2_walking", "p2_running", "p2_active", "p2_inactive"],
+            simple_event_predictions["p2"].T,
+        )
+    }
+    | {"close_p1_p2": simple_event_predictions["close(p1, p2)"]}
+)
+
+
+def labelling_function(var: nnf.Var) -> torch.Tensor:
+    if str(var.name).startswith("p"):
+        return (
+            weights[str(var.name)]
+            if var.true
+            else torch.ones_like(weights[str(var.name)])
+        )
+
+    return (weights[str(var.name)] if var.true else 1 - weights[str(var.name)]).squeeze(
+        -1
+    )
+
+
+state_probs = deepfa.forward(
+    labelling_function, accumulate=True, accumulate_collapse_accepting=False
+).squeeze(1)
+
+label2int = {"no_event": 0, "moving": 1, "interacting": 2}
+
+prediction_and_true_class_data = [
+    (
+        dict(zip(label2int.keys(), timestep_preds.tolist())),
+        caviar_data[i]["silver_event"],
+    )
+    for i, timestep_preds in enumerate(state_probs)
+]
+```
+
+At this point we have data that looks like the following:
+
+| P_No_Event | P_Moving  | P_Interacting | True_Class   |
+|------------|----------|---------------|-------------|
+| 1.0000     | 0.0000   | 0.0000        | no_event   |
+| 0.5078     | 0.2687   | 0.2235        | no_event   |
+| 0.3911     | 0.1940   | 0.4150        | interacting |
+| 0.3102     | 0.1390   | 0.5508        | interacting |
+| 0.2399     | 0.0979   | 0.6622        | interacting |
+| 0.1530     | 0.0504   | 0.7966        | interacting |
+| 0.1098     | 0.0707   | 0.8195        | interacting |
+| 0.0372     | 0.1419   | 0.8209        | interacting |
+| 0.0263     | 0.1500   | 0.8238        | interacting |
+| 0.0016     | 0.1746   | 0.8238        | interacting |
+| 0.0011     | 0.1751   | 0.8238        | interacting |
+| 0.0013     | 0.1749   | 0.8238        | interacting |
+| 0.9610     | 0.0003   | 0.0387        | no_event   |
+| 1.0000     | 0.0000   | 0.0000        | no_event   |
+| 1.0000     | 0.0000   | 0.0000        | no_event   |
+| 1.0000     | 0.0000   | 0.0000        | no_event   |
+| 0.1049     | 0.8924   | 0.0027        | moving     |
+| 0.0139     | 0.9831   | 0.0030        | moving     |
+
+which one can see is quite accurate in predicting complex 
+events based on raw images using both a neural network 
+for extracting simple events from the raw video stream and 
+an automaton to perform reasoning about the event dynamics 
+on top of the neural predictions.

@@ -551,3 +551,58 @@ events based on raw images using both a neural network
 for extracting simple events from the raw video stream and 
 an automaton to perform reasoning about the event dynamics 
 on top of the neural predictions.
+
+#### Explanation generation
+
+We will now investigate the most probable sequence of 
+simple events that occured such that moving is true
+in the penultimate timestep of the trace
+
+```python
+weights["close_p1_p2"].requires_grad_()
+
+
+def labelling_function_mpe(var: nnf.Var) -> torch.Tensor:
+    if str(var.name).startswith("p"):
+        return (
+            weights[str(var.name)]
+            if var.true
+            else torch.ones_like(weights[str(var.name)])
+        )[:16]
+
+    return (weights[str(var.name)] if var.true else 1 - weights[str(var.name)]).squeeze(
+        -1
+    )[:16]
+
+
+mpe = deepfa.forward(labelling_function_mpe, max_propagation=True)
+most_probable_assignment = {}
+for symbol, weight in weights.items():
+    most_probable_assignment[symbol] = (
+        torch.autograd.grad(mpe, weight, retain_graph=True)[0] * weight / mpe
+    )[:16]
+```
+
+We keep drop the final two timesteps from the predictions and try to find the 
+most probable sequence that led to ```moving``` being true. The
+abduced trace is as follows:
+
+| p1_simple_event | p2_simple_event | close_p1_p2 |
+|----------------|----------------|-------------|
+| walking       | walking         | 0           |
+| walking       | walking         | 1           |
+| walking       | active          | 1           |
+| walking       | active          | 1           |
+| walking       | active          | 1           |
+| active        | active          | 1           |
+| walking       | active          | 1           |
+| walking       | walking         | 1           |
+| walking       | walking         | 1           |
+| walking       | walking         | 1           |
+| walking       | walking         | 1           |
+| walking       | walking         | 1           |
+| inactive      | inactive        | 0           |
+| inactive      | inactive        | 0           |
+| inactive      | inactive        | 0           |
+| inactive      | inactive        | 0           |
+
